@@ -10,7 +10,7 @@ from sklearn.metrics import accuracy_score
 from sklearn.utils import class_weight
 
 # Specify the path to your CSV file
-data_path = "C:/Users/krama/Downloads/archive (10)/RTADatasetE.csv"
+data_path = "C:/Users/krama/Downloads/archive (10)/RTADataset.csv"
 data = pd.read_csv(data_path)
 
 # Define irrelevant columns to ignore
