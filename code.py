@@ -8,6 +8,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.metrics import accuracy_score
 from sklearn.utils import class_weight
+from sklearn.metrics import precision_recall_fscore_support
 
 # Specify the path to your CSV file
 data_path = "C:/Users/krama/Downloads/archive (10)/RTADataset.csv"
@@ -52,3 +53,10 @@ for name, clf in classifiers.items():
     y_pred = clf.predict(X_test)
     accuracy = accuracy_score(y_test, y_pred)
     print(f"{name} Accuracy:", accuracy)
+for name, clf in classifiers.items():
+    clf.fit(X_train, y_train)
+    y_pred = clf.predict(X_test)
+    precision, recall, f1, _ = precision_recall_fscore_support(y_test, y_pred, average='weighted')
+    print(f"{name} Precision:", precision)
+    print(f"{name} Recall:", recall)
+    print(f"{name} F1-score:", f1)
