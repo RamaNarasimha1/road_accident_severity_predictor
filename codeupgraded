@@ -1,42 +1,42 @@
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier, AdaBoostClassifier
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
 from sklearn.svm import SVC
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 from imblearn.over_sampling import SMOTE
 
 # Load the data
-df = pd.read_csv('C:/Users/krama/Downloads/archive (10)/RTADataset.csv')
-
+df = pd.read_csv("C:/Users/krama/Downloads/archive (10)/RTADataset.csv")
 
 # Convert the 'Time' column to datetime format
 df['Time'] = pd.to_datetime(df['Time'], format='%H:%M:%S')
 
 # Extract the hour from the 'Time' column
 df['Hour'] = df['Time'].dt.hour
+
 # Drop rows with missing data
 df.dropna(axis=0, inplace=True)
 
-irrelevant_columns = [ 'Lanes_or_Medians', 'Road_allignment',
-                      'Road_surface_type', 'Road_surface_conditions', 
-                      'Service_year_of_vehicle',  'Vehicle_movement', 'Pedestrian_movement',
-                       'Work_of_casuality', 'Fitness_of_casuality','Owner_of_vehicle','Vehicle_driver_relation','Light_conditions', 'Weather_conditions',]
+# Drop irrelevant columns
+irrelevant_columns = ['Lanes_or_Medians', 'Road_allignment', 'Road_surface_type', 'Road_surface_conditions', 
+                      'Service_year_of_vehicle', 'Vehicle_movement', 'Pedestrian_movement', 'Work_of_casuality', 
+                      'Fitness_of_casuality', 'Owner_of_vehicle', 'Vehicle_driver_relation', 'Light_conditions', 
+                      'Weather_conditions']
 df.drop(irrelevant_columns, axis=1, inplace=True)
 
 # Convert categorical columns to numeric
-categorical_columns = ['Day_of_week', 'Age_band_of_driver', 'Age_band_of_casualty', 'Types_of_Junction', 'Cause_of_accident', 'Sex_of_driver', 'Sex_of_casualty',
-                       'Educational_level', 'Area_accident_occured', 'Driving_experience', 'Type_of_vehicle',
-                       'Type_of_collision', 'Defect_of_vehicle', 'Casualty_class',
-                       'Casualty_severity','Time']
+categorical_columns = ['Day_of_week', 'Age_band_of_driver', 'Age_band_of_casualty', 'Types_of_Junction', 
+                       'Cause_of_accident', 'Sex_of_driver', 'Sex_of_casualty', 'Educational_level', 
+                       'Area_accident_occured', 'Driving_experience', 'Type_of_vehicle', 'Type_of_collision', 
+                       'Defect_of_vehicle', 'Casualty_class', 'Casualty_severity', 'Time']
+
 for col in categorical_columns:
     le = LabelEncoder()
     df[col] = le.fit_transform(df[col])
-
-
 
 # Separate features and target
 X = df.drop('Accident_severity', axis=1)
@@ -62,13 +62,58 @@ models_params = [
 ]
 
 # Perform hyperparameter tuning and model evaluation
+precision_values = []
+accuracy_values = []
+f1_score_values = []
+recall_values = []
+
 for model, params in models_params:
     grid_search = GridSearchCV(model, params, cv=5)
     grid_search.fit(X_train, y_train)
+    
     model_name = model.__class__.__name__
     y_pred = grid_search.predict(X_test)
+    
+    # Calculate evaluation metrics
     accuracy = accuracy_score(y_test, y_pred)
     precision = precision_score(y_test, y_pred, average='macro', zero_division='warn')
     recall = recall_score(y_test, y_pred, average='macro', zero_division='warn')
     f1 = f1_score(y_test, y_pred, average='macro')
+    
+    # Append metrics to respective lists
+    accuracy_values.append(accuracy)
+    precision_values.append(precision)
+    recall_values.append(recall)
+    f1_score_values.append(f1)
+    
     print(f"{model_name} - Accuracy: {accuracy}, Precision: {precision}, Recall: {recall}, F1-score: {f1}")
+
+# Define the labels for the algorithms
+algorithms = ['Histogram-based Gradient Boosting', 'Random Forest', 'SVM', 'KNN']
+
+# Function to plot bar graph with highlighting the highest value
+def plot_bar_graph(metric, values, algorithms):
+    plt.figure(figsize=(10, 6))
+    bars = plt.bar(algorithms, values, color='lightblue', edgecolor='black')
+    max_index = values.index(max(values))
+    bars[max_index].set_edgecolor('red')
+    plt.xlabel('Algorithms')
+    plt.ylabel(metric)
+    plt.title(f'{metric} of Different Algorithms')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
+
+# Plot precision bar graph
+plot_bar_graph('Precision', precision_values, algorithms)
+
+# Plot accuracy bar graph
+plot_bar_graph('Accuracy', accuracy_values, algorithms)
+
+# Plot F1-score bar graph
+plot_bar_graph('F1-score', f1_score_values, algorithms)
+
+# Plot recall bar graph
+plot_bar_graph('Recall', recall_values, algorithms)
+
+
