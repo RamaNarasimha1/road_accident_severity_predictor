@@ -1,0 +1,74 @@
+import pandas as pd
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier, AdaBoostClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import SVC
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from imblearn.over_sampling import SMOTE
+
+# Load the data
+df = pd.read_csv('C:/Users/krama/Downloads/archive (10)/RTADataset.csv')
+
+
+# Convert the 'Time' column to datetime format
+df['Time'] = pd.to_datetime(df['Time'], format='%H:%M:%S')
+
+# Extract the hour from the 'Time' column
+df['Hour'] = df['Time'].dt.hour
+# Drop rows with missing data
+df.dropna(axis=0, inplace=True)
+
+irrelevant_columns = [ 'Lanes_or_Medians', 'Road_allignment',
+                      'Road_surface_type', 'Road_surface_conditions', 
+                      'Service_year_of_vehicle',  'Vehicle_movement', 'Pedestrian_movement',
+                       'Work_of_casuality', 'Fitness_of_casuality','Owner_of_vehicle','Vehicle_driver_relation','Light_conditions', 'Weather_conditions',]
+df.drop(irrelevant_columns, axis=1, inplace=True)
+
+# Convert categorical columns to numeric
+categorical_columns = ['Day_of_week', 'Age_band_of_driver', 'Age_band_of_casualty', 'Types_of_Junction', 'Cause_of_accident', 'Sex_of_driver', 'Sex_of_casualty',
+                       'Educational_level', 'Area_accident_occured', 'Driving_experience', 'Type_of_vehicle',
+                       'Type_of_collision', 'Defect_of_vehicle', 'Casualty_class',
+                       'Casualty_severity','Time']
+for col in categorical_columns:
+    le = LabelEncoder()
+    df[col] = le.fit_transform(df[col])
+
+
+
+# Separate features and target
+X = df.drop('Accident_severity', axis=1)
+y = df['Accident_severity']
+
+# Scale the features
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+# Handle imbalanced data using SMOTE
+smote = SMOTE()
+X_resampled, y_resampled = smote.fit_resample(X_scaled, y)
+
+# Split the data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X_resampled, y_resampled, test_size=0.2, random_state=42)
+
+# Define models and hyperparameters for hyperparameter tuning
+models_params = [
+    (HistGradientBoostingClassifier(), {'learning_rate': [0.1, 0.01, 0.001], 'max_depth': [3, 5, 7], 'max_iter': [100, 200, 300]}),
+    (RandomForestClassifier(), {'n_estimators': [100, 200, 300], 'max_depth': [5, 10, 15], 'min_samples_split': [2, 5, 10]}),
+    (SVC(), {'C': [1, 10, 100], 'gamma': ['scale', 'auto']}),
+    (KNeighborsClassifier(), {'n_neighbors': [3, 5, 7], 'weights': ['uniform', 'distance']})
+]
+
+# Perform hyperparameter tuning and model evaluation
+for model, params in models_params:
+    grid_search = GridSearchCV(model, params, cv=5)
+    grid_search.fit(X_train, y_train)
+    model_name = model.__class__.__name__
+    y_pred = grid_search.predict(X_test)
+    accuracy = accuracy_score(y_test, y_pred)
+    precision = precision_score(y_test, y_pred, average='macro', zero_division='warn')
+    recall = recall_score(y_test, y_pred, average='macro', zero_division='warn')
+    f1 = f1_score(y_test, y_pred, average='macro')
+    print(f"{model_name} - Accuracy: {accuracy}, Precision: {precision}, Recall: {recall}, F1-score: {f1}")
