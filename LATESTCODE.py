@@ -1,5 +1,5 @@
 import pandas as pd
-from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.model_selection import train_test_split, RandomizedSearchCV
 from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
@@ -9,6 +9,7 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 from imblearn.over_sampling import SMOTE
 import seaborn as sns
 import matplotlib.pyplot as plt
+import numpy as np
 
 # Load the data
 df = pd.read_csv("C:/RAS/cleaned (2).csv")
@@ -18,27 +19,21 @@ columns_to_keep = ['Age_band_of_driver', 'Sex_of_driver', 'Educational_level', '
                    'Driving_experience', 'Lanes_or_Medians', 'Types_of_Junction', 'Road_surface_type', 
                    'Light_conditions', 'Weather_conditions', 'Type_of_collision', 'Vehicle_movement', 
                    'Pedestrian_movement', 'Cause_of_accident', 'Accident_severity']
-df = df[columns_to_keep]
-
-# Drop rows with missing values
-df = df.dropna()
+df = df[columns_to_keep].dropna()
 
 # Split features and target
 X = df.drop(['Accident_severity'], axis=1)
 y = df['Accident_severity']
 
 # Identify categorical columns
-categorical_cols = ['Age_band_of_driver', 'Sex_of_driver', 'Educational_level', 'Vehicle_driver_relation', 
-                    'Driving_experience', 'Lanes_or_Medians', 'Types_of_Junction', 'Road_surface_type', 
-                    'Light_conditions', 'Weather_conditions', 'Type_of_collision', 'Vehicle_movement', 
-                    'Pedestrian_movement', 'Cause_of_accident']
+categorical_cols = X.columns.tolist()
 
 # Apply One-Hot Encoding to categorical columns and return dense output
 preprocessor = ColumnTransformer(
     transformers=[
         ('cat', OneHotEncoder(sparse_output=False, drop='first'), categorical_cols)
     ],
-    remainder='passthrough'  # Leave any numerical columns as they are (if any exist)
+    remainder='passthrough' 
 )
 
 # Apply encoding and scaling
@@ -53,33 +48,36 @@ X_resampled, y_resampled = smote.fit_resample(X_scaled, y)
 # Split the data into training and testing sets
 X_train, X_test, y_train, y_test = train_test_split(X_resampled, y_resampled, test_size=0.2, random_state=42)
 
-# Function to evaluate and print metrics
+# Function to evaluate models
 def evaluate_model(model, X_test, y_test, model_name):
     predictions = model.predict(X_test)
     accuracy = accuracy_score(y_test, predictions)
     precision = precision_score(y_test, predictions, average='macro')
     recall = recall_score(y_test, predictions, average='macro')
     f1 = f1_score(y_test, predictions, average='macro')
-
-    print(f"{model_name} Accuracy: {accuracy}")
-    print(f"{model_name} Precision: {precision}")
-    print(f"{model_name} Recall: {recall}")
-    print(f"{model_name} F1-score: {f1}")
-
+    
+    print(f"{model_name} Accuracy: {accuracy:.4f}")
+    print(f"{model_name} Precision: {precision:.4f}")
+    print(f"{model_name} Recall: {recall:.4f}")
+    print(f"{model_name} F1-score: {f1:.4f}\n")
+    
     return accuracy, precision, recall, f1, confusion_matrix(y_test, predictions)
 
-# Hyperparameter tuning and training
+# Hyperparameter tuning and training using RandomizedSearchCV
+
+def tune_and_train(model, param_dist, X_train, y_train, X_test, y_test, model_name, n_iter=20):
+    random_search = RandomizedSearchCV(model, param_distributions=param_dist, n_iter=n_iter, cv=3, n_jobs=-1, verbose=1, random_state=42)
+    random_search.fit(X_train, y_train)
+    return evaluate_model(random_search.best_estimator_, X_test, y_test, model_name)
 
 # 1. Histogram-based Gradient Boosting
 hgb_params = {
-    'learning_rate': [0.01, 0.05, 0.1, 0.2],
+    'learning_rate': np.linspace(0.01, 0.2, 5),
     'max_depth': [3, 5, 7, 10],
-    'max_iter': [100, 200, 300, 500],
+    'max_iter': [100, 200, 300],
     'l2_regularization': [0, 1, 10]
 }
-hgb_model = GridSearchCV(HistGradientBoostingClassifier(), hgb_params, cv=5, n_jobs=-1, verbose=2)
-hgb_model.fit(X_train, y_train)
-hgb_metrics = evaluate_model(hgb_model, X_test, y_test, "Histogram-based Gradient Boosting")
+hgb_metrics = tune_and_train(HistGradientBoostingClassifier(), hgb_params, X_train, y_train, X_test, y_test, "HGB")
 
 # 2. Random Forest
 rf_params = {
@@ -89,29 +87,23 @@ rf_params = {
     'min_samples_leaf': [1, 2, 4],
     'bootstrap': [True, False]
 }
-rf_model = GridSearchCV(RandomForestClassifier(), rf_params, cv=5, n_jobs=-1, verbose=2)
-rf_model.fit(X_train, y_train)
-rf_metrics = evaluate_model(rf_model, X_test, y_test, "Random Forest")
+rf_metrics = tune_and_train(RandomForestClassifier(), rf_params, X_train, y_train, X_test, y_test, "RF")
 
 # 3. SVM
 svm_params = {
     'C': [0.1, 1, 10, 100],
     'gamma': ['scale', 'auto', 0.1, 0.01],
-    'kernel': ['linear', 'rbf', 'poly']
+    'kernel': ['linear', 'rbf']
 }
-svm_model = GridSearchCV(SVC(), svm_params, cv=5, n_jobs=-1, verbose=2)
-svm_model.fit(X_train, y_train)
-svm_metrics = evaluate_model(svm_model, X_test, y_test, "SVM")
+svm_metrics = tune_and_train(SVC(), svm_params, X_train, y_train, X_test, y_test, "SVM")
 
 # 4. KNN
 knn_params = {
-    'n_neighbors': [3, 5, 7, 9, 11],
+    'n_neighbors': [3, 5, 7, 9],
     'weights': ['uniform', 'distance'],
-    'metric': ['euclidean', 'manhattan', 'minkowski']
+    'metric': ['euclidean', 'manhattan']
 }
-knn_model = GridSearchCV(KNeighborsClassifier(), knn_params, cv=5, n_jobs=-1, verbose=2)
-knn_model.fit(X_train, y_train)
-knn_metrics = evaluate_model(knn_model, X_test, y_test, "KNN")
+knn_metrics = tune_and_train(KNeighborsClassifier(), knn_params, X_train, y_train, X_test, y_test, "KNN")
 
 # Plot metrics for comparison
 def plot_bar_graph(metric, values, algorithms):
@@ -126,19 +118,13 @@ def plot_bar_graph(metric, values, algorithms):
     plt.tight_layout()
     plt.show()
 
-# Collect metrics
-metrics = ['Precision', 'Accuracy', 'F1-score', 'Recall']
-precision_values = [hgb_metrics[1], rf_metrics[1], svm_metrics[1], knn_metrics[1]]
-accuracy_values = [hgb_metrics[0], rf_metrics[0], svm_metrics[0], knn_metrics[0]]
-f1_score_values = [hgb_metrics[3], rf_metrics[3], svm_metrics[3], knn_metrics[3]]
-recall_values = [hgb_metrics[2], rf_metrics[2], svm_metrics[2], knn_metrics[2]]
+# Collect and plot metrics
 algorithms = ['HGB', 'RF', 'SVM', 'KNN']
+metrics_data = [hgb_metrics, rf_metrics, svm_metrics, knn_metrics]
 
-# Plot graphs
-plot_bar_graph('Precision', precision_values, algorithms)
-plot_bar_graph('Accuracy', accuracy_values, algorithms)
-plot_bar_graph('F1-score', f1_score_values, algorithms)
-plot_bar_graph('Recall', recall_values, algorithms)
+for i, metric_name in enumerate(['Accuracy', 'Precision', 'Recall', 'F1-score']):
+    values = [m[i] for m in metrics_data]
+    plot_bar_graph(metric_name, values, algorithms)
 
 # Confusion matrices
 def plot_confusion_matrix(conf_matrix, title):
@@ -149,7 +135,5 @@ def plot_confusion_matrix(conf_matrix, title):
     plt.ylabel('True Label')
     plt.show()
 
-plot_confusion_matrix(hgb_metrics[4], 'HGB Confusion Matrix')
-plot_confusion_matrix(rf_metrics[4], 'RF Confusion Matrix')
-plot_confusion_matrix(svm_metrics[4], 'SVM Confusion Matrix')
-plot_confusion_matrix(knn_metrics[4], 'KNN Confusion Matrix')
+for algo, metrics in zip(algorithms, metrics_data):
+    plot_confusion_matrix(metrics[4], f'{algo} Confusion Matrix')
